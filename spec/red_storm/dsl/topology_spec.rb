@@ -353,6 +353,7 @@ describe RedStorm::SimpleTopology do
       configurator = mock(RedStorm::Configurator)
       jruby_bolt1 = mock(RedStorm::JRubyBolt)
       jruby_bolt2 = mock(RedStorm::JRubyBolt)
+      jruby_bolt3 = mock(RedStorm::JRubyBolt)
       declarer = mock("Declarer")
 
       RedStorm::TopologyBuilder.should_receive(:new).and_return(builder)
@@ -407,7 +408,20 @@ describe RedStorm::SimpleTopology do
         end
 
         RedStorm::Fields.should_receive(:new).with("f1").and_return("fields")
-        @declarer.should_receive("fieldsGrouping").with('1', "fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'default', "fields")
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support single string fields with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, { :fields => "f1" }, 'custom_stream'
+          end
+        end
+
+        RedStorm::Fields.should_receive(:new).with("f1").and_return("fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'custom_stream', "fields")
         Topology1.new.start(:cluster)
       end
 
@@ -420,7 +434,20 @@ describe RedStorm::SimpleTopology do
         end
 
         RedStorm::Fields.should_receive(:new).with("s1").and_return("fields")
-        @declarer.should_receive("fieldsGrouping").with('1', "fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'default', "fields")
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support single symbolic fields with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, { :fields => :s1 }, 'custom_stream'
+          end
+        end
+
+        RedStorm::Fields.should_receive(:new).with("s1").and_return("fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'custom_stream', "fields")
         Topology1.new.start(:cluster)
       end
 
@@ -433,7 +460,20 @@ describe RedStorm::SimpleTopology do
         end
 
         RedStorm::Fields.should_receive(:new).with("f1", "f2").and_return("fields")
-        @declarer.should_receive("fieldsGrouping").with('1', "fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'default', "fields")
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support string array fields with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, { :fields => ["f1", "f2"] }, 'custom_stream'
+          end
+        end
+
+        RedStorm::Fields.should_receive(:new).with("f1", "f2").and_return("fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'custom_stream', "fields")
         Topology1.new.start(:cluster)
       end
 
@@ -446,7 +486,20 @@ describe RedStorm::SimpleTopology do
         end
 
         RedStorm::Fields.should_receive(:new).with("s1", "s2").and_return("fields")
-        @declarer.should_receive("fieldsGrouping").with('1', "fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'default', "fields")
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support symbolic array fields with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, { :fields => [:s1, :s2] }, 'custom_stream'
+          end
+        end
+
+        RedStorm::Fields.should_receive(:new).with("s1", "s2").and_return("fields")
+        @declarer.should_receive("fieldsGrouping").with('1', 'custom_stream', "fields")
         Topology1.new.start(:cluster)
       end
 
@@ -458,7 +511,19 @@ describe RedStorm::SimpleTopology do
           end
         end
 
-        @declarer.should_receive("shuffleGrouping").with('1')
+        @declarer.should_receive("shuffleGrouping").with('1', 'default')
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support shuffle with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, :shuffle, 'custom_stream'
+          end
+        end
+
+        @declarer.should_receive("shuffleGrouping").with('1', 'custom_stream')
         Topology1.new.start(:cluster)
       end
 
@@ -470,7 +535,19 @@ describe RedStorm::SimpleTopology do
           end
         end
 
-        @declarer.should_receive("localOrShuffleGrouping").with('1')
+        @declarer.should_receive("localOrShuffleGrouping").with('1', 'default')
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support local_or_shuffle with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, :local_or_shuffle, 'custom_stream'
+          end
+        end
+
+        @declarer.should_receive("localOrShuffleGrouping").with('1', 'custom_stream')
         Topology1.new.start(:cluster)
       end
 
@@ -482,7 +559,19 @@ describe RedStorm::SimpleTopology do
           end
         end
 
-        @declarer.should_receive("noneGrouping").with('1')
+        @declarer.should_receive("noneGrouping").with('1', 'default')
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support none" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, :none, 'custom_stream'
+          end
+        end
+
+        @declarer.should_receive("noneGrouping").with('1', 'custom_stream')
         Topology1.new.start(:cluster)
       end
 
@@ -494,7 +583,19 @@ describe RedStorm::SimpleTopology do
           end
         end
 
-        @declarer.should_receive("globalGrouping").with('1')
+        @declarer.should_receive("globalGrouping").with('1', 'default')
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support global with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, :global, 'custom_stream'
+          end
+        end
+
+        @declarer.should_receive("globalGrouping").with('1', 'custom_stream')
         Topology1.new.start(:cluster)
       end
 
@@ -506,7 +607,19 @@ describe RedStorm::SimpleTopology do
           end
         end
 
-        @declarer.should_receive("allGrouping").with('1')
+        @declarer.should_receive("allGrouping").with('1', 'default')
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support all with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, :all, 'custom_stream'
+          end
+        end
+
+        @declarer.should_receive("allGrouping").with('1', 'custom_stream')
         Topology1.new.start(:cluster)
       end
 
@@ -518,7 +631,19 @@ describe RedStorm::SimpleTopology do
           end
         end
 
-        @declarer.should_receive("directGrouping").with('1')
+        @declarer.should_receive("directGrouping").with('1', 'default')
+        Topology1.new.start(:cluster)
+      end
+
+      it "should support direct with a stream" do
+        class Topology1 < RedStorm::SimpleTopology
+          spout SpoutClass1, :id => 1
+          bolt BoltClass1 do
+            source 1, :direct, 'custom_stream'
+          end
+        end
+
+        @declarer.should_receive("directGrouping").with('1', 'custom_stream')
         Topology1.new.start(:cluster)
       end
     end
@@ -576,7 +701,7 @@ describe RedStorm::SimpleTopology do
 
       Topology1.spouts.first.id.should == '1'
       Topology1.bolts.first.id.should == '2'
-      Topology1.bolts.first.sources.first.should == ['1', {:shuffle => nil}]
+      Topology1.bolts.first.sources.first.should == ['1', {:shuffle => nil}, 'default']
     end
 
     it "should support explicit string ids" do
@@ -590,7 +715,7 @@ describe RedStorm::SimpleTopology do
 
       Topology1.spouts.first.id.should == "id1"
       Topology1.bolts.first.id.should == "id2"
-      Topology1.bolts.first.sources.first.should == ["id1", {:shuffle => nil}]
+      Topology1.bolts.first.sources.first.should == ["id1", {:shuffle => nil}, 'default']
     end
 
     it "should support implicit string ids" do
@@ -604,7 +729,7 @@ describe RedStorm::SimpleTopology do
 
       Topology1.spouts.first.id.should == "spout_class1"
       Topology1.bolts.first.id.should == "bolt_class1"
-      Topology1.bolts.first.sources.first.should == ["spout_class1", {:shuffle => nil}]
+      Topology1.bolts.first.sources.first.should == ["spout_class1", {:shuffle => nil}, 'default']
     end
 
     it "should support implicit symbol ids" do
@@ -618,7 +743,7 @@ describe RedStorm::SimpleTopology do
 
       Topology1.spouts.first.id.should == "spout_class1"
       Topology1.bolts.first.id.should == "bolt_class1"
-      Topology1.bolts.first.sources.first.should == ['spout_class1', {:shuffle => nil}]
+      Topology1.bolts.first.sources.first.should == ['spout_class1', {:shuffle => nil}, 'default']
     end
 
     it "should support implicit class ids" do
@@ -632,7 +757,7 @@ describe RedStorm::SimpleTopology do
 
       Topology1.spouts.first.id.should == "spout_class1"
       Topology1.bolts.first.id.should == "bolt_class1"
-      Topology1.bolts.first.sources.first.should == ["spout_class1", {:shuffle => nil}]
+      Topology1.bolts.first.sources.first.should == ["spout_class1", {:shuffle => nil}, 'default']
     end
 
     it "should raise on unresolvable" do
@@ -646,7 +771,7 @@ describe RedStorm::SimpleTopology do
 
       Topology1.spouts.first.id.should == "spout_class1"
       Topology1.bolts.first.id.should == "bolt_class1"
-      Topology1.bolts.first.sources.first.should == ["dummy", {:shuffle => nil}]
+      Topology1.bolts.first.sources.first.should == ["dummy", {:shuffle => nil}, 'default']
 
       lambda {Topology1.resolve_ids!(Topology1.spouts + Topology1.bolts)}.should raise_error RuntimeError, "cannot resolve BoltClass1 source id=dummy"
     end
