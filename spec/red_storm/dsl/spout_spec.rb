@@ -888,11 +888,17 @@ describe RedStorm::SimpleSpout do
     end
 
     describe "get_component_configuration" do
-
       it "should return Backtype::Config object" do
         class Spout1 < RedStorm::SimpleSpout; end
         spout = Spout1.new
         spout.get_component_configuration.should be_instance_of(Backtype::Config)
+      end
+    end
+
+    describe 'inherited' do
+      it 'should calculate base class path correctly' do
+        File.should_receive(:expand_path).with(__FILE__)
+        class TestSpout < RedStorm::SimpleSpout; end
       end
     end
   end

@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    redstorm (0.7.0.beta1)
+    redstorm (0.8.0)
       rake
 
 GEM
@@ -25,7 +25,7 @@ GEM
       method_source (~> 0.8.1)
       slop (~> 3.4)
       spoon (~> 0.0)
-    rake (10.0.4)
+    rake (10.4.2)
     redis (3.0.4)
     rest-client (1.6.7)
       mime-types (>= 1.16)
@@ -55,3 +55,4 @@ DEPENDENCIES
   redis
   redstorm!
   rspec (~> 2.13)
+  rspec-mocks (~> 2.13)

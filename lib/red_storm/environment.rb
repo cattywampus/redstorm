@@ -5,12 +5,19 @@ module RedStorm
   CWD = Dir.pwd
 
   launch_path = File.expand_path(File.dirname(__FILE__))
-  jar_context = !!(launch_path =~ /\.jar!\/red_storm$/)
+  jar_context = !!(launch_path =~ /stormjar\.jar!\/red_storm$/)
 
   if jar_context
-    BASE_PATH = File.expand_path(launch_path + '/..')
+    BASE_PATH = 'uri:classloader:/'
     REDSTORM_HOME = BASE_PATH
     GEM_PATH = "#{REDSTORM_HOME}/gems/"
+    # If we're in the "cluster" mode that means we're running in an embedded JRuby
+    # and we should modify our environment to suit that.
+    if env == :cluster
+      Dir.chdir('uri:classloader:/')
+      ENV['JARS_HOME'] = 'uri:classloader:/jars'
+      $LOAD_PATH.unshift('uri:classloader://')
+    end
   else
     BASE_PATH = CWD
     REDSTORM_HOME = File.expand_path(launch_path + '/../..')
@@ -47,7 +54,7 @@ module RedStorm
   DEFAULT_IVY_TOPOLOGY_DEPENDENCIES = "#{SRC_IVY_DIR}/topology_dependencies.xml"
   CUSTOM_IVY_TOPOLOGY_DEPENDENCIES = "#{DST_IVY_DIR}/topology_dependencies.xml"
 
-  DEFAULT_STORM_CONF_FILE = File.expand_path("~/.storm/storm.yaml")
+  DEFAULT_STORM_CONF_FILE = File.expand_path("$HOME/.storm/storm.yaml") rescue ''
 
   def current_ruby_mode
     version = RUBY_VERSION[/(\d+\.\d+)(\.\d+)*/, 1]

@@ -21,6 +21,7 @@ Gem::Specification.new do |s|
   s.executables   = ['redstorm']
 
   s.add_development_dependency 'rspec', '~> 2.13'
+  s.add_development_dependency 'rspec-mocks', '~> 2.13'
   s.add_development_dependency 'pry'
   s.add_runtime_dependency 'rake'
 end

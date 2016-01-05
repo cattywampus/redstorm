@@ -3,7 +3,6 @@ require 'red_storm/configurator'
 require 'red_storm/environment'
 require 'red_storm/loggable'
 require 'red_storm/dsl/output_fields'
-require 'pathname'
 
 java_import 'backtype.storm.tuple.Fields'
 java_import 'backtype.storm.tuple.Values'
@@ -32,20 +31,26 @@ module RedStorm
 
         self.receive_options.merge!(options)
 
-        # indirecting through a lambda defers the method lookup at invocation time
-        # and the performance penalty is negligible
-        body = block_given? ? on_receive_block : lambda{|tuple| self.send((method_name || :on_receive).to_sym, tuple)}
-        define_method(:on_receive, body)
+        unless self.instance_methods.include?(:on_receive)
+          # indirecting through a lambda defers the method lookup at invocation time
+          # and the performance penalty is negligible
+          body = block_given? ? on_receive_block : lambda{|tuple| self.send((method_name || :on_receive).to_sym, tuple)}
+          define_method(:on_receive, body)
+        end
       end
 
       def self.on_init(method_name = nil, &on_init_block)
-        body = block_given? ? on_init_block : lambda {self.send((method_name || :on_init).to_sym)}
-        define_method(:on_init, body)
+        unless self.instance_methods.include?(:on_init)
+          body = block_given? ? on_init_block : lambda {self.send((method_name || :on_init).to_sym)}
+          define_method(:on_init, body)
+        end
       end
 
       def self.on_close(method_name = nil, &on_close_block)
-        body = block_given? ? on_close_block : lambda {self.send((method_name || :on_close).to_sym)}
-        define_method(:on_close, body)
+        unless self.instance_methods.include?(:on_close)
+          body = block_given? ? on_close_block : lambda {self.send((method_name || :on_close).to_sym)}
+          define_method(:on_close, body)
+        end
       end
 
       # DSL instance methods
@@ -150,7 +155,7 @@ module RedStorm
       # below non-dry see Spout class
       def self.inherited(subclass)
         path = (caller.first.to_s =~ /^(.+):\d+.*$/) ? $1 : raise(BoltError, "unable to extract base topology class path from #{caller.first.inspect}")
-        subclass.base_class_path = Pathname.new(path).relative_path_from(Pathname.new(RedStorm::BASE_PATH)).to_s
+        subclass.base_class_path = File.expand_path(path)
       end
 
       def self.base_class_path=(path)
