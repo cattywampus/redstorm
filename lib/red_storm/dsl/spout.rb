@@ -1,7 +1,8 @@
 require 'java'
 require 'red_storm/configurator'
 require 'red_storm/environment'
-require 'pathname'
+require 'red_storm/loggable'
+require 'red_storm/dsl/output_fields'
 
 module RedStorm
   module DSL
@@ -9,6 +10,8 @@ module RedStorm
     class SpoutError < StandardError; end
 
     class Spout
+      include Loggable
+      include OutputFields
       attr_reader :config, :context, :collector
 
       def self.java_proxy; "Java::RedstormStormJruby::JRubySpout"; end
@@ -17,14 +20,6 @@ module RedStorm
 
       def self.configure(&configure_block)
         @configure_block = block_given? ? configure_block : lambda {}
-      end
-
-      def self.log
-        @log ||= Java::OrgApacheLog4j::Logger.getLogger(self.name)
-      end
-
-      def self.output_fields(*fields)
-        @fields = fields.map(&:to_s)
       end
 
       def self.on_send(*args, &on_send_block)
@@ -82,10 +77,6 @@ module RedStorm
       end
       alias_method :emit, :unreliable_emit
 
-      def log
-        self.class.log
-      end
-
       # Spout proxy interface
 
       def next_tuple
@@ -126,10 +117,6 @@ module RedStorm
         on_deactivate
       end
 
-      def declare_output_fields(declarer)
-        declarer.declare(Fields.new(self.class.fields))
-      end
-
       def ack(msg_id)
         on_ack(msg_id)
       end
@@ -154,10 +141,6 @@ module RedStorm
       def on_ack(msg_id); end
       def on_fail(msg_id); end
 
-      def self.fields
-        @fields ||= []
-      end
-
       def self.configure_block
         @configure_block ||= lambda {}
       end
@@ -177,7 +160,7 @@ module RedStorm
       # below non-dry see Bolt class
       def self.inherited(subclass)
         path = (caller.first.to_s =~ /^(.+):\d+.*$/) ? $1 : raise(SpoutError, "unable to extract base topology class path from #{caller.first.inspect}")
-        subclass.base_class_path = Pathname.new(path).relative_path_from(Pathname.new(RedStorm::BASE_PATH)).to_s
+        subclass.base_class_path = File.expand_path(path)
       end
 
       def self.base_class_path=(path)

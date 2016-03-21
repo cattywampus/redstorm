@@ -45,21 +45,42 @@ describe RedStorm::SimpleBolt do
           output_fields :f1
         end
         bolt = Bolt1.new
-        Bolt1.send(:fields).should == ["f1"]
+        Bolt1.send(:fields).should == {"default" => ["f1"]}
       end
 
       it "should parse multiple arguments" do
         class Bolt1 < RedStorm::SimpleBolt
           output_fields :f1, :f2
         end
-        Bolt1.send(:fields).should == ["f1", "f2"]
+        Bolt1.send(:fields).should == {"default" => ["f1", "f2"]}
       end
 
       it "should parse string and symbol arguments" do
         class Bolt1 < RedStorm::SimpleBolt
           output_fields :f1, "f2"
         end
-        Bolt1.send(:fields).should == ["f1", "f2"]
+        Bolt1.send(:fields).should == {"default" => ["f1", "f2"]}
+      end
+
+      it "should parse single hash argument" do
+        class Bolt1 < RedStorm::SimpleBolt
+          output_fields :stream => :f1
+        end
+        Bolt1.send(:fields).should == {"stream" => ["f1"]}
+      end
+
+      it "should parse hash of string and symbols" do
+        class Bolt1 < RedStorm::SimpleBolt
+          output_fields "stream" => [:f1, :f2]
+        end
+        Bolt1.send(:fields).should == {"stream" => ["f1", "f2"]}
+      end
+
+      it "should parse string and hash arguments" do
+        class Bolt1 < RedStorm::SimpleBolt
+          output_fields :f1, :stream => :f2
+        end
+        Bolt1.send(:fields).should == {"default" => ["f1"], "stream" => ["f2"]}
       end
 
       it "should not share state over mutiple classes" do
@@ -69,9 +90,9 @@ describe RedStorm::SimpleBolt do
         class Bolt2 < RedStorm::SimpleBolt
           output_fields :f2
         end
-        RedStorm::SimpleBolt.send(:fields).should == []
-        Bolt1.send(:fields).should == ["f1"]
-        Bolt2.send(:fields).should == ["f2"]
+        RedStorm::SimpleBolt.send(:fields).should == {}
+        Bolt1.send(:fields).should == {"default" => ["f1"]}
+        Bolt2.send(:fields).should == {"default" => ["f2"]}
       end
     end
 
@@ -105,6 +126,13 @@ describe RedStorm::SimpleBolt do
       end
 
       describe "with block argument" do
+        it "should set the on_receive method to the block" do
+          class Bolt1 < RedStorm::SimpleBolt
+            on_receive { 'a block value' }
+          end
+
+          Bolt1.new.on_receive.should == 'a block value'
+        end
 
         it "should parse without options" do
           class Bolt1 < RedStorm::SimpleBolt
@@ -115,6 +143,7 @@ describe RedStorm::SimpleBolt do
           Bolt1.send(:emit?).should be_true
           Bolt1.send(:ack?).should be_false
           Bolt1.send(:anchor?).should be_false
+          Bolt1.send(:stream?).should be_false
         end
 
         it "should parse :emit option" do
@@ -147,16 +176,27 @@ describe RedStorm::SimpleBolt do
           Bolt1.send(:anchor?).should be_true
         end
 
-        it "should parse multiple option" do
+        it "should parse :stream option" do
           class Bolt1 < RedStorm::SimpleBolt
-            on_receive :emit => false, :ack =>true, :anchor => true do
+            on_receive :stream => "test" do
             end
           end
 
-          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:emit =>false, :ack => true, :anchor => true)
+          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:stream => "test")
+          Bolt1.send(:stream?).should be_true
+        end
+
+        it "should parse multiple option" do
+          class Bolt1 < RedStorm::SimpleBolt
+            on_receive :emit => false, :ack =>true, :anchor => true, :stream => "test" do
+            end
+          end
+
+          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:emit =>false, :ack => true, :anchor => true, :stream => "test")
           Bolt1.send(:emit?).should be_false
           Bolt1.send(:ack?).should be_true
           Bolt1.send(:anchor?).should be_true
+          Bolt1.send(:stream?).should be_true
         end
       end
 
@@ -166,13 +206,13 @@ describe RedStorm::SimpleBolt do
           class Bolt1 < RedStorm::SimpleBolt
             def test_method; end
             on_receive :test_method
-
           end
 
           Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS
           Bolt1.send(:emit?).should be_true
           Bolt1.send(:ack?).should be_false
           Bolt1.send(:anchor?).should be_false
+          Bolt1.send(:stream?).should be_false
         end
 
         it "should parse :emit option" do
@@ -186,8 +226,7 @@ describe RedStorm::SimpleBolt do
 
         it "should parse :ack option" do
           class Bolt1 < RedStorm::SimpleBolt
-            on_receive :ack => true do
-            end
+            on_receive :test_method, :ack => true
           end
 
           Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:ack => true)
@@ -196,28 +235,48 @@ describe RedStorm::SimpleBolt do
 
         it "should parse :anchor option" do
           class Bolt1 < RedStorm::SimpleBolt
-            on_receive :anchor => true do
-            end
+            on_receive :test_method, :anchor => true
           end
 
           Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:anchor => true)
           Bolt1.send(:anchor?).should be_true
         end
 
-        it "should parse multiple option" do
+        it "should parse :stream option" do
           class Bolt1 < RedStorm::SimpleBolt
-            on_receive :emit => false, :ack =>true, :anchor => true do
-            end
+            on_receive :test_method, :stream => "test"
           end
 
-          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:emit =>false, :ack => true, :anchor => true)
+          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:stream => "test")
+          Bolt1.send(:stream?).should be_true
+        end
+
+        it "should parse multiple option" do
+          class Bolt1 < RedStorm::SimpleBolt
+            on_receive :test_method, :emit => false, :ack =>true, :anchor => true, :stream => "test"
+          end
+
+          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:emit =>false, :ack => true, :anchor => true, :stream => "test")
           Bolt1.send(:emit?).should be_false
           Bolt1.send(:ack?).should be_true
           Bolt1.send(:anchor?).should be_true
+          Bolt1.send(:stream?).should be_true
         end
       end
 
       describe "with default method" do
+        it "should use the default method" do
+          CUSTOM_RECEIVE_OPTIONS = {:emit => false, :ack => false, :anchor => true}
+
+          class Bolt1 < RedStorm::SimpleBolt
+            on_receive CUSTOM_RECEIVE_OPTIONS
+            def on_receive ; 'a method value' ; end
+          end
+
+          Bolt1.new.on_receive.should == 'a method value'
+
+          Bolt1.receive_options.should == CUSTOM_RECEIVE_OPTIONS
+        end
 
         it "should parse without options" do
           class Bolt1 < RedStorm::SimpleBolt
@@ -227,6 +286,7 @@ describe RedStorm::SimpleBolt do
           Bolt1.send(:emit?).should be_true
           Bolt1.send(:ack?).should be_false
           Bolt1.send(:anchor?).should be_false
+          Bolt1.send(:stream?).should be_false
         end
 
         it "should parse :emit option" do
@@ -256,15 +316,25 @@ describe RedStorm::SimpleBolt do
           Bolt1.send(:anchor?).should be_true
         end
 
-        it "should parse multiple option" do
+        it "should parse :stream option" do
           class Bolt1 < RedStorm::SimpleBolt
-            on_receive :emit => false, :ack =>true, :anchor => true
+            on_receive :stream => "test"
           end
 
-          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:emit =>false, :ack => true, :anchor => true)
+          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:stream => "test")
+          Bolt1.send(:stream?).should be_true
+        end
+
+        it "should parse multiple option" do
+          class Bolt1 < RedStorm::SimpleBolt
+            on_receive :emit => false, :ack =>true, :anchor => true, :stream => "test"
+          end
+
+          Bolt1.receive_options.should == DEFAULT_RECEIVE_OPTIONS.merge(:emit =>false, :ack => true, :anchor => true, :stream => "test")
           Bolt1.send(:emit?).should be_false
           Bolt1.send(:ack?).should be_true
           Bolt1.send(:anchor?).should be_true
+          Bolt1.send(:stream?).should be_true
         end
       end
     end
@@ -290,10 +360,19 @@ describe RedStorm::SimpleBolt do
         bolt.should_receive(:test_method)
         bolt.prepare(nil, nil, nil)
       end
+
+      it "should use a predefined method" do
+        class Bolt1 < RedStorm::SimpleBolt
+          def on_init
+            'a method value'
+          end
+        end
+
+        Bolt1.new.on_init.should == 'a method value'
+      end
     end
 
     describe "on_close statement" do
-
       it "should parse block argument" do
         class Bolt1 < RedStorm::SimpleBolt
           on_close {self.test_block_call}
@@ -313,6 +392,16 @@ describe RedStorm::SimpleBolt do
         bolt.should_receive(:test_method)
         bolt.cleanup
       end
+
+      it "should use a predefined method" do
+        class Bolt1 < RedStorm::SimpleBolt
+          def on_close
+            'a method value'
+          end
+        end
+
+        Bolt1.new.on_close.should == 'a method value'
+      end
     end
 
     describe "configure statement" do
@@ -330,13 +419,14 @@ describe RedStorm::SimpleBolt do
     # log specs are mostly the same ats in the spout specs. if these are modified, sync with spout
     describe "log statement" do
 
-      module Java::OrgApacheLog4j end;
-      class Java::OrgApacheLog4j::Logger; end
+      module Java::OrgSlf4j end;
+      class Java::OrgSlf4j::Logger; end
+      class Java::OrgSlf4j::LoggerFactory; end
 
        describe "in class" do
-        it "should proxy to storm log4j logger" do
-          logger = mock(Java::OrgApacheLog4j::Logger)
-          Java::OrgApacheLog4j::Logger.should_receive("getLogger").with("Bolt1").and_return(logger)
+        it "should proxy to storm slf4j logger" do
+          logger = mock(Java::OrgSlf4j::Logger)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Bolt1").and_return(logger)
           logger.should_receive(:info).with("test")
 
           class Bolt1 < RedStorm::SimpleBolt
@@ -345,10 +435,10 @@ describe RedStorm::SimpleBolt do
         end
 
         it "should use own class name as logger id" do
-          logger1 = mock(Java::OrgApacheLog4j::Logger)
-          logger2 = mock(Java::OrgApacheLog4j::Logger)
-          Java::OrgApacheLog4j::Logger.should_receive("getLogger").with("Bolt1").and_return(logger1)
-          Java::OrgApacheLog4j::Logger.should_receive("getLogger").with("Bolt2").and_return(logger2)
+          logger1 = mock(Java::OrgSlf4j::Logger)
+          logger2 = mock(Java::OrgSlf4j::Logger)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Bolt1").and_return(logger1)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Bolt2").and_return(logger2)
           logger1.should_receive(:info).with("test1")
           logger2.should_receive(:info).with("test2")
 
@@ -362,9 +452,9 @@ describe RedStorm::SimpleBolt do
       end
 
       describe "in instance" do
-        it "should proxy to storm log4j logger" do
-          logger = mock(Java::OrgApacheLog4j::Logger)
-          Java::OrgApacheLog4j::Logger.should_receive("getLogger").with("Bolt1").and_return(logger)
+        it "should proxy to storm slf4j logger" do
+          logger = mock(Java::OrgSlf4j::Logger)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Bolt1").and_return(logger)
 
           class Bolt1 < RedStorm::SimpleBolt
             on_init {log.info("test")}
@@ -376,10 +466,10 @@ describe RedStorm::SimpleBolt do
         end
 
         it "should use own class name as logger id" do
-          logger1 = mock(Java::OrgApacheLog4j::Logger)
-          logger2 = mock(Java::OrgApacheLog4j::Logger)
-          Java::OrgApacheLog4j::Logger.should_receive("getLogger").with("Bolt1").and_return(logger1)
-          Java::OrgApacheLog4j::Logger.should_receive("getLogger").with("Bolt2").and_return(logger2)
+          logger1 = mock(Java::OrgSlf4j::Logger)
+          logger2 = mock(Java::OrgSlf4j::Logger)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Bolt1").and_return(logger1)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Bolt2").and_return(logger2)
 
           class Bolt1 < RedStorm::SimpleBolt
             on_init {log.info("test1")}
@@ -395,6 +485,22 @@ describe RedStorm::SimpleBolt do
           logger2.should_receive(:info).with("test2")
           bolt2 = Bolt2.new
           bolt2.prepare(nil, nil, nil)
+        end
+
+        it "should conform to SLF4J Named Hierarchy when loading loggers" do
+          logger = mock(Java::OrgSlf4j::Logger)
+          Java::OrgSlf4j::LoggerFactory.should_receive("get_logger").with("Named.Hierarchy.Bolt").and_return(logger)
+          module Named
+            module Hierarchy
+              class Bolt < RedStorm::SimpleBolt
+                on_init {log.info("test1")}
+              end
+            end
+          end
+
+          logger.should_receive(:info).with("test1")
+          bolt = Named::Hierarchy::Bolt.new
+          bolt.prepare(nil, nil, nil)
         end
       end
     end
@@ -603,6 +709,74 @@ describe RedStorm::SimpleBolt do
         bolt.prepare(nil, nil, collector)
         bolt.execute("output")
       end
+
+      it "should emit tuple on a stream" do
+        class Bolt1 < RedStorm::SimpleBolt
+          on_receive :stream => :custom_stream do |tuple|
+            tuple
+          end
+        end
+        class Bolt2 < RedStorm::SimpleBolt
+          on_receive :my_method, :stream => :custom_stream
+          def my_method(tuple); tuple; end
+        end
+        class Bolt3 < RedStorm::SimpleBolt
+          on_receive :stream => :custom_stream
+          def on_receive(tuple); tuple; end
+        end
+
+        collector = mock("Collector")
+        RedStorm::Values.should_receive(:new).with("output").exactly(3).times.and_return("values")
+        collector.should_receive(:emit_tuple_stream).with(:custom_stream, "values").exactly(3).times
+
+        bolt = Bolt1.new
+        bolt.prepare(nil, nil, collector)
+        bolt.execute("output")
+
+        bolt = Bolt2.new
+        bolt.prepare(nil, nil, collector)
+        bolt.execute("output")
+
+        bolt = Bolt3.new
+        bolt.prepare(nil, nil, collector)
+        bolt.execute("output")
+      end
+
+      it "should emit anchored tuple on a stream" do
+        class Bolt1 < RedStorm::SimpleBolt
+          on_receive :anchor => true, :stream => :custom_stream do |tuple|
+            "output"
+          end
+        end
+        class Bolt2 < RedStorm::SimpleBolt
+          on_receive :my_method, :anchor => true, :stream => :custom_stream
+          def my_method(tuple)
+            "output"
+          end
+        end
+        class Bolt3 < RedStorm::SimpleBolt
+          on_receive :anchor => true, :stream => :custom_stream
+          def on_receive(tuple)
+            "output"
+          end
+        end
+
+        collector = mock("Collector")
+        RedStorm::Values.should_receive(:new).with("output").exactly(3).times.and_return("values")
+        collector.should_receive(:emit_anchor_tuple_stream).with(:custom_stream, "tuple", "values").exactly(3).times
+
+        bolt = Bolt1.new
+        bolt.prepare(nil, nil, collector)
+        bolt.execute("tuple")
+
+        bolt = Bolt2.new
+        bolt.prepare(nil, nil, collector)
+        bolt.execute("tuple")
+
+        bolt = Bolt3.new
+        bolt.prepare(nil, nil, collector)
+        bolt.execute("tuple")
+      end
     end
 
     describe "prepare" do
@@ -685,14 +859,39 @@ describe RedStorm::SimpleBolt do
         bolt = Bolt1.new
         class RedStorm::Fields; end
         declarer = mock("Declarer")
-        declarer.should_receive(:declare).with("fields")
+        declarer.should_receive(:declareStream).with("default", "fields")
         RedStorm::Fields.should_receive(:new).with(["f1", "f2"]).and_return("fields")
+        bolt.declare_output_fields(declarer)
+      end
+
+      it "should declare stream with fields" do
+        class Bolt1 < RedStorm::SimpleBolt
+          output_fields :stream => [:f1, :f2]
+        end
+        bolt = Bolt1.new
+        class RedStorm::Fields; end
+        declarer = mock("Declarer")
+        declarer.should_receive(:declareStream).with("stream", "fields")
+        RedStorm::Fields.should_receive(:new).with(["f1", "f2"]).and_return("fields")
+        bolt.declare_output_fields(declarer)
+      end
+
+      it "should declare default stream fields and custom stream fields" do
+        class Bolt1 < RedStorm::SimpleBolt
+          output_fields :f1, :f2, :stream => [:f3, :f4]
+        end
+        bolt = Bolt1.new
+        class RedStorm::Fields; end
+        declarer = mock("Declarer")
+        declarer.should_receive(:declareStream).with("stream", "stream_fields")
+        declarer.should_receive(:declareStream).with("default", "default_fields")
+        RedStorm::Fields.should_receive(:new).with(["f3", "f4"]).and_return("stream_fields")
+        RedStorm::Fields.should_receive(:new).with(["f1", "f2"]).and_return("default_fields")
         bolt.declare_output_fields(declarer)
       end
     end
 
     describe "get_component_configuration" do
-
       it "should return Backtype::Config object" do
         class Bolt1 < RedStorm::SimpleBolt; end
         bolt = Bolt1.new
@@ -700,5 +899,11 @@ describe RedStorm::SimpleBolt do
       end
     end
 
+    describe "inherited" do
+      it 'should calculate base class path correctly' do
+        File.should_receive(:expand_path).with(__FILE__)
+        class TestBolt < RedStorm::SimpleBolt; end
+      end
+    end
   end
 end

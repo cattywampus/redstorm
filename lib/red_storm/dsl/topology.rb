@@ -1,9 +1,11 @@
 require 'java'
 require 'red_storm/configuration'
 require 'red_storm/configurator'
+require 'red_storm/loggable'
 
 java_import 'backtype.storm.topology.TopologyBuilder'
 java_import 'backtype.storm.generated.SubmitOptions'
+java_import 'backtype.storm.utils.Utils'
 
 module RedStorm
   module DSL
@@ -11,8 +13,8 @@ module RedStorm
     class TopologyDefinitionError < StandardError; end
 
     class Topology
+      include Loggable
       attr_reader :cluster # LocalCluster reference usable in on_submit block, for example
-
       DEFAULT_SPOUT_PARALLELISM = 1
       DEFAULT_BOLT_PARALLELISM = 1
 
@@ -26,15 +28,44 @@ module RedStorm
           @constructor_args = constructor_args
           @id = id.to_s
           @parallelism = parallelism
-          @output_fields = []
+          @output_fields = Hash.new([])
+
+          initialize_output_fields
         end
 
-        def output_fields(*args)
-          args.empty? ? @output_fields : @output_fields = args.map(&:to_s)
+        def output_fields(*fields)
+          default_fields = []
+          fields.each do |field|
+            case field
+            when Hash
+              field.each { |k, v| @output_fields[k.to_s] = v.kind_of?(Array) ? v.map(&:to_s) : [v.to_s] }
+            else
+              default_fields |= field.kind_of?(Array) ? field.map(&:to_s) : [field.to_s]
+            end
+          end
+          @output_fields[Utils::DEFAULT_STREAM_ID] = default_fields unless default_fields.empty?
+
+          @output_fields
         end
 
         def is_java?
           @clazz.name.split('::').first.downcase == 'java'
+        end
+
+        private
+
+        def initialize_output_fields
+          if @clazz.ancestors.include?(RedStorm::DSL::OutputFields)
+            @output_fields = @clazz.fields.clone
+          end
+        end
+
+        def java_safe_fields
+          java_hash = java.util.HashMap.new()
+          @output_fields.each do |k, v|
+            java_hash.put(k, v.to_java('java.lang.String')) unless v.empty?
+          end
+          java_hash
         end
       end
 
@@ -47,7 +78,7 @@ module RedStorm
           elsif is_java?
             @clazz.new(*constructor_args)
           else
-            Object.module_eval(@clazz.java_proxy).new(@clazz.base_class_path, @clazz.name, @output_fields)
+            Object.module_eval(@clazz.java_proxy).new(@clazz.base_class_path, @clazz.name, java_safe_fields)
           end
         end
       end
@@ -60,29 +91,33 @@ module RedStorm
           @sources = []
         end
 
-        def source(source_id, grouping)
-          @sources << [source_id.is_a?(Class) ? Topology.underscore(source_id) : source_id.to_s, grouping.is_a?(Hash) ? grouping : {grouping => nil}]
+        def source(source_id, grouping, stream = Utils::DEFAULT_STREAM_ID)
+          @sources << [
+            source_id.is_a?(Class) ? Topology.underscore(source_id) : source_id.to_s,
+            grouping.is_a?(Hash) ? grouping : {grouping => nil},
+            stream.to_s
+          ]
         end
 
         def define_grouping(declarer)
-          @sources.each do |source_id, grouping|
+          @sources.each do |source_id, grouping, stream|
             grouper, params = grouping.first
               # declarer.fieldsGrouping(source_id, Fields.new())
             case grouper
             when :fields
-              declarer.fieldsGrouping(source_id, Fields.new(*([params].flatten.map(&:to_s))))
+              declarer.fieldsGrouping(source_id, stream, Fields.new(*([params].flatten.map(&:to_s))))
             when :global
-              declarer.globalGrouping(source_id)
+              declarer.globalGrouping(source_id, stream)
             when :shuffle
-              declarer.shuffleGrouping(source_id)
+              declarer.shuffleGrouping(source_id, stream)
             when :local_or_shuffle
-              declarer.localOrShuffleGrouping(source_id)
+              declarer.localOrShuffleGrouping(source_id, stream)
             when :none
-              declarer.noneGrouping(source_id)
+              declarer.noneGrouping(source_id, stream)
             when :all
-              declarer.allGrouping(source_id)
+              declarer.allGrouping(source_id, stream)
             when :direct
-              declarer.directGrouping(source_id)
+              declarer.directGrouping(source_id, stream)
             else
               raise("unknown grouper=#{grouper.inspect}")
             end
@@ -96,13 +131,9 @@ module RedStorm
           elsif is_java?
             @clazz.new(*constructor_args)
           else
-            Object.module_eval(@clazz.java_proxy).new(@clazz.base_class_path, @clazz.name, @output_fields)
+            Object.module_eval(@clazz.java_proxy).new(@clazz.base_class_path, @clazz.name, java_safe_fields)
           end
         end
-      end
-
-      def self.log
-        @log ||= Java::OrgApacheLog4j::Logger.getLogger(self.name)
       end
 
       # def self.spout(spout_class, contructor_args = [], options = {}, &spout_block)

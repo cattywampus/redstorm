@@ -1,7 +1,8 @@
 require 'java'
 require 'red_storm/configurator'
 require 'red_storm/environment'
-require 'pathname'
+require 'red_storm/loggable'
+require 'red_storm/dsl/output_fields'
 
 java_import 'backtype.storm.tuple.Fields'
 java_import 'backtype.storm.tuple.Values'
@@ -12,19 +13,13 @@ module RedStorm
     class BoltError < StandardError; end
 
     class Bolt
+      include Loggable
+      include OutputFields
       attr_reader :collector, :context, :config
 
       def self.java_proxy; "Java::RedstormStormJruby::JRubyBolt"; end
 
       # DSL class methods
-
-      def self.log
-        @log ||= Java::OrgApacheLog4j::Logger.getLogger(self.name)
-      end
-
-      def self.output_fields(*fields)
-        @fields = fields.map(&:to_s)
-      end
 
       def self.configure(&configure_block)
         @configure_block = block_given? ? configure_block : lambda {}
@@ -36,34 +31,48 @@ module RedStorm
 
         self.receive_options.merge!(options)
 
-        # indirecting through a lambda defers the method lookup at invocation time
-        # and the performance penalty is negligible
-        body = block_given? ? on_receive_block : lambda{|tuple| self.send((method_name || :on_receive).to_sym, tuple)}
-        define_method(:on_receive, body)
+        unless self.instance_methods.include?(:on_receive)
+          # indirecting through a lambda defers the method lookup at invocation time
+          # and the performance penalty is negligible
+          body = block_given? ? on_receive_block : lambda{|tuple| self.send((method_name || :on_receive).to_sym, tuple)}
+          define_method(:on_receive, body)
+        end
       end
 
       def self.on_init(method_name = nil, &on_init_block)
-        body = block_given? ? on_init_block : lambda {self.send((method_name || :on_init).to_sym)}
-        define_method(:on_init, body)
+        unless self.instance_methods.include?(:on_init)
+          body = block_given? ? on_init_block : lambda {self.send((method_name || :on_init).to_sym)}
+          define_method(:on_init, body)
+        end
       end
 
       def self.on_close(method_name = nil, &on_close_block)
-        body = block_given? ? on_close_block : lambda {self.send((method_name || :on_close).to_sym)}
-        define_method(:on_close, body)
+        unless self.instance_methods.include?(:on_close)
+          body = block_given? ? on_close_block : lambda {self.send((method_name || :on_close).to_sym)}
+          define_method(:on_close, body)
+        end
       end
 
       # DSL instance methods
 
-      def log
-        self.class.log
+      def stream
+        self.class.stream
       end
 
       def unanchored_emit(*values)
         @collector.emit_tuple(Values.new(*values))
       end
 
+      def unanchored_stream_emit(stream, *values)
+        @collector.emit_tuple_stream(stream, Values.new(*values))
+      end
+
       def anchored_emit(tuple, *values)
         @collector.emit_anchor_tuple(tuple, Values.new(*values))
+      end
+
+      def anchored_stream_emit(stream, tuple, *values)
+        @collector.emit_anchor_tuple_stream(stream, tuple, Values.new(*values))
       end
 
       def ack(tuple)
@@ -80,7 +89,21 @@ module RedStorm
         output = on_receive(tuple)
         if output && self.class.emit?
           values_list = !output.is_a?(Array) ? [[output]] : !output.first.is_a?(Array) ? [output] : output
-          values_list.each{|values| self.class.anchor? ? anchored_emit(tuple, *values) : unanchored_emit(*values)}
+          values_list.each do |values|
+            if self.class.anchor?
+              if self.class.stream?
+                anchored_stream_emit(self.stream, tuple, *values)
+              else
+                anchored_emit(tuple, *values)
+              end
+            else
+              if self.class.stream?
+                unanchored_stream_emit(self.stream, *values)
+              else
+                unanchored_emit(*values)
+              end
+            end
+          end
           @collector.ack(tuple) if self.class.ack?
         end
       end
@@ -97,10 +120,6 @@ module RedStorm
         on_close
       end
 
-      def declare_output_fields(declarer)
-        declarer.declare(Fields.new(self.class.fields))
-      end
-
       def get_component_configuration
         configurator = Configurator.new
         configurator.instance_exec(&self.class.configure_block)
@@ -112,10 +131,6 @@ module RedStorm
       # default noop optional dsl callbacks
       def on_init; end
       def on_close; end
-
-      def self.fields
-        @fields ||= []
-      end
 
       def self.configure_block
         @configure_block ||= lambda {}
@@ -140,7 +155,7 @@ module RedStorm
       # below non-dry see Spout class
       def self.inherited(subclass)
         path = (caller.first.to_s =~ /^(.+):\d+.*$/) ? $1 : raise(BoltError, "unable to extract base topology class path from #{caller.first.inspect}")
-        subclass.base_class_path = Pathname.new(path).relative_path_from(Pathname.new(RedStorm::BASE_PATH)).to_s
+        subclass.base_class_path = File.expand_path(path)
       end
 
       def self.base_class_path=(path)
