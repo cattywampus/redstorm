@@ -77,6 +77,14 @@ module RedStorm
       end
       alias_method :emit, :unreliable_emit
 
+      def reliable_stream_emit(stream, message_id, *values)
+        @collector.emit(stream, Values.new(*values), message_id)
+      end
+
+      def unreliable_stream_emit(stream, *values)
+        @collector.emit(stream, Values.new(*values))
+      end
+
       # Spout proxy interface
 
       def next_tuple

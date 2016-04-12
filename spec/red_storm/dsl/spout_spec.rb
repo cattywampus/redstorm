@@ -722,6 +722,40 @@ describe RedStorm::SimpleSpout do
         spout.open(nil, nil, collector)
         spout.next_tuple
       end
+
+      it "should support stream emits" do
+        class Spout1 < RedStorm::SimpleSpout
+          output_fields :def_f1, :stream2 => [:s2_f1]
+
+          on_send :emit => false do
+            reliable_stream_emit 'stream2', 1, "reliable output"
+          end
+        end
+
+        class Spout2 < RedStorm::SimpleSpout
+          output_fields :def_f1, :stream2 => [:s2_f1]
+
+          on_send :emit => false do
+            unreliable_stream_emit 'stream2', "unreliable output"
+          end
+        end
+
+        collector = mock("Collector")
+        RedStorm::Values.should_receive(:new).once.with("reliable output").and_return("reliable values")
+        RedStorm::Values.should_receive(:new).once.with("unreliable output").and_return("unreliable values")
+        collector.should_receive(:emit).with('stream2', "unreliable values").once
+        collector.should_receive(:emit).with('stream2', "reliable values", 1).once
+
+        spout = Spout1.new
+        spout.should_receive(:sleep).never
+        spout.open(nil, nil, collector)
+        spout.next_tuple
+
+        spout = Spout2.new
+        spout.should_receive(:sleep).never
+        spout.open(nil, nil, collector)
+        spout.next_tuple
+      end
     end
 
     describe "open" do
