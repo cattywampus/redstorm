@@ -57,9 +57,7 @@ module RedStorm
   DEFAULT_STORM_CONF_FILE = File.expand_path("$HOME/.storm/storm.yaml") rescue ''
 
   def current_ruby_mode
-    version = RUBY_VERSION[/(\d+\.\d+)(\.\d+)*/, 1]
-    raise("unknown Ruby version #{$1}") unless ["1.8", "1.9"].include?(version)
-    version
+    RUBY_VERSION[/(\d+\.\d+)(\.\d+)*/, 1]
   end
 
   def jruby_mode_token(ruby_version = nil)
