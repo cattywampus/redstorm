@@ -155,6 +155,9 @@ module RedStorm
       # below non-dry see Spout class
       def self.inherited(subclass)
         path = (caller.first.to_s =~ /^(.+):\d+.*$/) ? $1 : raise(BoltError, "unable to extract base topology class path from #{caller.first.inspect}")
+        if path.include?('cluster-topology.jar')
+          path = "uri:classloader:#{path.split(/jar!/, 2)[1]}"
+        end
         subclass.base_class_path = File.expand_path(path)
       end
 
